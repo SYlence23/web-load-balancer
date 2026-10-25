@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -18,16 +19,16 @@ class RenderRequest(ApiModel):
 
 
 class RenderCreated(ApiModel):
-    id: str
+    id: uuid.UUID
     renderer: str
 
 
 class RenderStatus(ApiModel):
-    id: str
+    id: uuid.UUID
     status: str
     progress: float
     error: str | None
-    renderer: str
+    renderer: str | None
     scene: str
     width: int
     height: int

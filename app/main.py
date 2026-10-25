@@ -7,6 +7,7 @@ from fastapi import FastAPI
 
 from app.balancer import registry
 from app.config import settings
+from app.db import engine, init_db
 from app.routers import renders
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:     %(name)s - %(message)s")
@@ -14,6 +15,8 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s:     %(name)s - %(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await init_db()
+
     async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as http:
         app.state.http = http
         health_task = asyncio.create_task(registry.run(http))
@@ -21,6 +24,8 @@ async def lifespan(app: FastAPI):
         health_task.cancel()
         with suppress(asyncio.CancelledError):
             await health_task
+
+    await engine.dispose()
 
 
 app = FastAPI(title="web-load-balancer", lifespan=lifespan)
