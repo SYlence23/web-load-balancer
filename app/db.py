@@ -20,6 +20,8 @@ async def init_db() -> None:
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
         await connection.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS image_path VARCHAR(300)"))
+        await connection.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)"))
+        await connection.execute(text("CREATE INDEX IF NOT EXISTS ix_tasks_user_id ON tasks (user_id)"))
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:

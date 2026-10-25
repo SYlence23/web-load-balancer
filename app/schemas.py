@@ -9,6 +9,22 @@ class ApiModel(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
+class Credentials(ApiModel):
+    username: str = Field(min_length=3, max_length=50, pattern=r"^[A-Za-z0-9_.-]+$")
+    password: str = Field(min_length=6, max_length=72)
+
+
+class UserOut(ApiModel):
+    id: int
+    username: str
+    is_admin: bool
+
+
+class Token(ApiModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
 class RenderRequest(ApiModel):
     scene: str
     width: int = Field(gt=0)

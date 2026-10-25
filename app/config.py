@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://postgres@localhost:5432/WEBdb"
     tracker_interval: float = 1.0
     images_dir: str = "data/images"
+    jwt_secret: str = "dev-only-secret-change-me"
+    jwt_expire_minutes: int = 24 * 60
 
     @property
     def renderer_urls(self) -> list[str]:

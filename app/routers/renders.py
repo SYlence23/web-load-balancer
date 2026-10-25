@@ -8,9 +8,10 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth import get_current_user
 from app.balancer import NoRendererAvailable, RendererRejected, registry
 from app.db import get_session
-from app.models import FINAL_STATUSES, Task
+from app.models import FINAL_STATUSES, Task, User
 from app.schemas import RenderCreated, RenderRequest, RenderStatus
 
 router = APIRouter(prefix="/renders", tags=["renders"])
@@ -25,6 +26,7 @@ async def create_render(
     body: RenderRequest,
     http: httpx.AsyncClient = Depends(get_http),
     session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
 ) -> RenderCreated:
     payload = {
         "scene": body.scene,
@@ -44,6 +46,7 @@ async def create_render(
         raise HTTPException(error.status_code, error.detail)
 
     task = Task(
+        user_id=user.id,
         scene=body.scene,
         width=body.width,
         height=body.height,
@@ -60,14 +63,22 @@ async def create_render(
 
 
 @router.get("", response_model=list[RenderStatus])
-async def list_renders(session: AsyncSession = Depends(get_session)) -> list[RenderStatus]:
-    result = await session.scalars(select(Task).order_by(Task.created_at.desc()).limit(50))
+async def list_renders(
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> list[RenderStatus]:
+    query = select(Task).where(Task.user_id == user.id).order_by(Task.created_at.desc()).limit(50)
+    result = await session.scalars(query)
     return [_to_status(task) for task in result]
 
 
 @router.get("/{render_id}", response_model=RenderStatus)
-async def get_render(render_id: uuid.UUID, session: AsyncSession = Depends(get_session)) -> RenderStatus:
-    task = await _get_task(session, render_id)
+async def get_render(
+    render_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> RenderStatus:
+    task = await _get_task(session, render_id, user)
     return _to_status(task)
 
 
@@ -76,8 +87,9 @@ async def get_render_image(
     render_id: uuid.UUID,
     http: httpx.AsyncClient = Depends(get_http),
     session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
 ) -> Response:
-    task = await _get_task(session, render_id)
+    task = await _get_task(session, render_id, user)
 
     if task.image_path and Path(task.image_path).exists():
         return FileResponse(task.image_path, media_type="image/png")
@@ -94,8 +106,9 @@ async def cancel_render(
     render_id: uuid.UUID,
     http: httpx.AsyncClient = Depends(get_http),
     session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
 ) -> None:
-    task = await _get_task(session, render_id)
+    task = await _get_task(session, render_id, user)
     if task.status in FINAL_STATUSES:
         return
 
@@ -105,9 +118,9 @@ async def cancel_render(
     await session.commit()
 
 
-async def _get_task(session: AsyncSession, render_id: uuid.UUID) -> Task:
+async def _get_task(session: AsyncSession, render_id: uuid.UUID, user: User) -> Task:
     task = await session.get(Task, render_id)
-    if task is None:
+    if task is None or task.user_id != user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Render not found.")
     return task
 
