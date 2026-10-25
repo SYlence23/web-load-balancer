@@ -5,5 +5,8 @@
 __pycache__/
 *.py[cod]
 
+# Rendered images
+data/
+
 # Local settings
 .env

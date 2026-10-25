@@ -1,8 +1,10 @@
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -64,23 +66,8 @@ async def list_renders(session: AsyncSession = Depends(get_session)) -> list[Ren
 
 
 @router.get("/{render_id}", response_model=RenderStatus)
-async def get_render(
-    render_id: uuid.UUID,
-    http: httpx.AsyncClient = Depends(get_http),
-    session: AsyncSession = Depends(get_session),
-) -> RenderStatus:
+async def get_render(render_id: uuid.UUID, session: AsyncSession = Depends(get_session)) -> RenderStatus:
     task = await _get_task(session, render_id)
-
-    if task.status not in FINAL_STATUSES:
-        response = await _call_renderer(http, task, "GET", "")
-        data = response.json()
-        task.status = data["status"]
-        task.progress = data["progress"]
-        task.error = data.get("error")
-        if task.status in FINAL_STATUSES:
-            task.finished_at = datetime.now(timezone.utc)
-        await session.commit()
-
     return _to_status(task)
 
 
@@ -91,8 +78,15 @@ async def get_render_image(
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     task = await _get_task(session, render_id)
-    response = await _call_renderer(http, task, "GET", "/image")
-    return Response(content=response.content, media_type="image/png")
+
+    if task.image_path and Path(task.image_path).exists():
+        return FileResponse(task.image_path, media_type="image/png")
+
+    if task.status == "running":
+        response = await _call_renderer(http, task, "GET", "/image")
+        return Response(content=response.content, media_type="image/png")
+
+    raise HTTPException(status.HTTP_404_NOT_FOUND, "Image is not available.")
 
 
 @router.delete("/{render_id}", status_code=status.HTTP_204_NO_CONTENT)

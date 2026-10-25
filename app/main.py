@@ -9,6 +9,7 @@ from app.balancer import registry
 from app.config import settings
 from app.db import engine, init_db
 from app.routers import renders
+from app.tracker import tracker
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:     %(name)s - %(message)s")
 
@@ -19,11 +20,16 @@ async def lifespan(app: FastAPI):
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as http:
         app.state.http = http
-        health_task = asyncio.create_task(registry.run(http))
+        background = [
+            asyncio.create_task(registry.run(http)),
+            asyncio.create_task(tracker.run(http)),
+        ]
         yield
-        health_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await health_task
+        for task in background:
+            task.cancel()
+        for task in background:
+            with suppress(asyncio.CancelledError):
+                await task
 
     await engine.dispose()
 

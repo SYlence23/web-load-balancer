@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     health_interval: float = 2.0
     health_fails: int = 3
     database_url: str = "postgresql+asyncpg://postgres@localhost:5432/WEBdb"
+    tracker_interval: float = 1.0
+    images_dir: str = "data/images"
 
     @property
     def renderer_urls(self) -> list[str]:
