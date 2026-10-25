@@ -2,24 +2,29 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager, suppress
 
+import httpx
 from fastapi import FastAPI
 
 from app.balancer import registry
 from app.config import settings
+from app.routers import renders
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:     %(name)s - %(message)s")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    health_task = asyncio.create_task(registry.run())
-    yield
-    health_task.cancel()
-    with suppress(asyncio.CancelledError):
-        await health_task
+    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as http:
+        app.state.http = http
+        health_task = asyncio.create_task(registry.run(http))
+        yield
+        health_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await health_task
 
 
 app = FastAPI(title="web-load-balancer", lifespan=lifespan)
+app.include_router(renders.router)
 
 
 @app.get("/health")

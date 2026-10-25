@@ -25,21 +25,68 @@ class Renderer:
         return self.running / self.capacity if self.capacity else 1.0
 
 
+class NoRendererAvailable(Exception):
+    pass
+
+
+class RendererRejected(Exception):
+    def __init__(self, status_code: int, detail: str):
+        super().__init__(detail)
+        self.status_code = status_code
+        self.detail = detail
+
+
 class RendererRegistry:
     def __init__(self, urls: list[str], interval: float, max_fails: int):
         self.renderers = [Renderer(url=url, name=url) for url in urls]
         self.interval = interval
         self.max_fails = max_fails
 
-    async def run(self) -> None:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(1.5)) as client:
-            while True:
-                await asyncio.gather(*(self._check(client, r) for r in self.renderers))
-                await asyncio.sleep(self.interval)
+    async def run(self, client: httpx.AsyncClient) -> None:
+        while True:
+            await asyncio.gather(*(self._check(client, r) for r in self.renderers))
+            await asyncio.sleep(self.interval)
+
+    def pick(self, exclude: set[str]) -> Renderer | None:
+        candidates = [
+            r for r in self.renderers
+            if r.up and r.running < r.capacity and r.url not in exclude
+        ]
+        if not candidates:
+            return None
+        return min(candidates, key=lambda r: (r.load, r.name))
+
+    async def dispatch(self, client: httpx.AsyncClient, payload: dict) -> tuple[Renderer, str]:
+        tried: set[str] = set()
+
+        while (renderer := self.pick(exclude=tried)) is not None:
+            tried.add(renderer.url)
+            renderer.running += 1
+
+            try:
+                response = await client.post(f"{renderer.url}/tasks", json=payload)
+            except httpx.HTTPError as error:
+                renderer.running -= 1
+                logger.warning("Renderer %s did not accept the task: %r", renderer.name, error)
+                continue
+
+            if response.status_code == 503:
+                renderer.running = renderer.capacity
+                continue
+
+            if response.status_code != 201:
+                renderer.running -= 1
+                raise RendererRejected(response.status_code, _error_detail(response))
+
+            task_id = response.json()["id"]
+            logger.info("Task %s sent to %s (load %.2f)", task_id, renderer.name, renderer.load)
+            return renderer, task_id
+
+        raise NoRendererAvailable()
 
     async def _check(self, client: httpx.AsyncClient, renderer: Renderer) -> None:
         try:
-            response = await client.get(f"{renderer.url}/health")
+            response = await client.get(f"{renderer.url}/health", timeout=1.5)
             response.raise_for_status()
             data = response.json()
             renderer.name = data["name"]
@@ -57,6 +104,16 @@ class RendererRegistry:
         renderer.up = True
         renderer.fails = 0
         renderer.last_seen = time.time()
+
+
+def _error_detail(response: httpx.Response) -> str:
+    try:
+        body = response.json()
+    except ValueError:
+        return response.text
+    if isinstance(body, dict):
+        return body.get("detail") or body.get("title") or str(body)
+    return str(body)
 
 
 registry = RendererRegistry(settings.renderer_urls, settings.health_interval, settings.health_fails)
