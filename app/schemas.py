@@ -36,7 +36,10 @@ class RenderRequest(ApiModel):
 
 class RenderCreated(ApiModel):
     id: uuid.UUID
-    renderer: str
+    status: str
+    renderer: str | None
+    queue_position: int | None = None
+    eta_seconds: float | None = None
 
 
 class RenderStatus(ApiModel):
@@ -50,3 +53,5 @@ class RenderStatus(ApiModel):
     height: int
     spp: int
     created_at: datetime
+    queue_position: int | None = None
+    eta_seconds: float | None = None

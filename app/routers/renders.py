@@ -13,6 +13,7 @@ from app.balancer import NoRendererAvailable, RendererRejected, registry
 from app.db import get_session
 from app.limits import check_active_tasks, check_render_size, trim_history, user_locks
 from app.models import FINAL_STATUSES, Task, User
+from app.render_queue import QueueInfo, dispatch_lock, has_queued, mark_running, queue_info, worker_payload
 from app.schemas import RenderCreated, RenderRequest, RenderStatus
 
 router = APIRouter(prefix="/renders", tags=["renders"])
@@ -33,43 +34,39 @@ async def create_render(
 
     async with user_locks[user.id]:
         await check_active_tasks(session, user.id)
-        task = await _dispatch(body, http, user)
-        session.add(task)
-        await trim_history(session, user.id)
-        await session.commit()
+        task = Task(
+            user_id=user.id,
+            scene=body.scene,
+            width=body.width,
+            height=body.height,
+            spp=body.spp,
+            max_depth=body.max_depth,
+            seed=body.seed,
+            status="queued",
+        )
 
-    return RenderCreated(id=task.id, renderer=task.renderer)
+        async with dispatch_lock:
+            if not await has_queued(session):
+                try:
+                    renderer, renderer_task_id = await registry.dispatch(http, worker_payload(task))
+                except NoRendererAvailable:
+                    pass
+                except RendererRejected as error:
+                    raise HTTPException(error.status_code, error.detail)
+                else:
+                    mark_running(task, renderer, renderer_task_id)
 
+            session.add(task)
+            await trim_history(session, user.id)
+            await session.commit()
 
-async def _dispatch(body: RenderRequest, http: httpx.AsyncClient, user: User) -> Task:
-    payload = {
-        "scene": body.scene,
-        "width": body.width,
-        "height": body.height,
-        "samplesPerPixel": body.spp,
-        "maxDepth": body.max_depth,
-        "seed": body.seed,
-    }
-    payload = {key: value for key, value in payload.items() if value is not None}
-
-    try:
-        renderer, renderer_task_id = await registry.dispatch(http, payload)
-    except NoRendererAvailable:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "All renderers are busy or down.")
-    except RendererRejected as error:
-        raise HTTPException(error.status_code, error.detail)
-
-    return Task(
-        user_id=user.id,
-        scene=body.scene,
-        width=body.width,
-        height=body.height,
-        spp=body.spp,
-        max_depth=body.max_depth,
-        seed=body.seed,
-        renderer=renderer.name,
-        renderer_url=renderer.url,
-        renderer_task_id=renderer_task_id,
+    info = await queue_info(session)
+    return RenderCreated(
+        id=task.id,
+        status=task.status,
+        renderer=task.renderer,
+        queue_position=info.positions.get(task.id),
+        eta_seconds=info.eta_seconds(task.id),
     )
 
 
@@ -79,8 +76,9 @@ async def list_renders(
     user: User = Depends(get_current_user),
 ) -> list[RenderStatus]:
     query = select(Task).where(Task.user_id == user.id).order_by(Task.created_at.desc()).limit(50)
-    result = await session.scalars(query)
-    return [_to_status(task) for task in result]
+    tasks = (await session.scalars(query)).all()
+    info = await queue_info(session)
+    return [_to_status(task, info) for task in tasks]
 
 
 @router.get("/{render_id}", response_model=RenderStatus)
@@ -90,7 +88,7 @@ async def get_render(
     user: User = Depends(get_current_user),
 ) -> RenderStatus:
     task = await _get_task(session, render_id, user)
-    return _to_status(task)
+    return _to_status(task, await queue_info(session))
 
 
 @router.get("/{render_id}/image", response_class=Response)
@@ -123,7 +121,8 @@ async def cancel_render(
     if task.status in FINAL_STATUSES:
         return
 
-    await _call_renderer(http, task, "DELETE", "")
+    if task.status == "running":
+        await _call_renderer(http, task, "DELETE", "")
     task.status = "cancelled"
     task.finished_at = datetime.now(timezone.utc)
     await session.commit()
@@ -136,7 +135,7 @@ async def _get_task(session: AsyncSession, render_id: uuid.UUID, user: User) -> 
     return task
 
 
-def _to_status(task: Task) -> RenderStatus:
+def _to_status(task: Task, info: QueueInfo) -> RenderStatus:
     return RenderStatus(
         id=task.id,
         status=task.status,
@@ -148,6 +147,8 @@ def _to_status(task: Task) -> RenderStatus:
         height=task.height,
         spp=task.spp,
         created_at=task.created_at,
+        queue_position=info.positions.get(task.id),
+        eta_seconds=info.eta_seconds(task.id),
     )
 
 

@@ -10,6 +10,7 @@ from app.balancer import registry
 from app.config import settings
 from app.db import SessionLocal
 from app.models import FINAL_STATUSES, Task
+from app.render_queue import dispatch_queued
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,7 @@ class TaskTracker:
         while True:
             try:
                 await self._poll_once(http)
+                await dispatch_queued(http)
             except Exception:
                 logger.exception("Task tracking failed")
             await asyncio.sleep(self.interval)
