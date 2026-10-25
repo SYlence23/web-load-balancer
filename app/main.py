@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from app.balancer import registry
 from app.config import settings
 from app.db import engine, init_db
-from app.routers import auth, renders
+from app.routers import auth, progress, renders
 from app.tracker import tracker
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:     %(name)s - %(message)s")
@@ -37,6 +37,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="web-load-balancer", lifespan=lifespan)
 app.include_router(auth.router)
 app.include_router(renders.router)
+app.include_router(progress.router)
 
 
 @app.get("/health")

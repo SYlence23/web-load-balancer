@@ -78,7 +78,7 @@ async def list_renders(
     query = select(Task).where(Task.user_id == user.id).order_by(Task.created_at.desc()).limit(50)
     tasks = (await session.scalars(query)).all()
     info = await queue_info(session)
-    return [_to_status(task, info) for task in tasks]
+    return [to_status(task, info) for task in tasks]
 
 
 @router.get("/{render_id}", response_model=RenderStatus)
@@ -88,7 +88,7 @@ async def get_render(
     user: User = Depends(get_current_user),
 ) -> RenderStatus:
     task = await _get_task(session, render_id, user)
-    return _to_status(task, await queue_info(session))
+    return to_status(task, await queue_info(session))
 
 
 @router.get("/{render_id}/image", response_class=Response)
@@ -135,7 +135,7 @@ async def _get_task(session: AsyncSession, render_id: uuid.UUID, user: User) -> 
     return task
 
 
-def _to_status(task: Task, info: QueueInfo) -> RenderStatus:
+def to_status(task: Task, info: QueueInfo) -> RenderStatus:
     return RenderStatus(
         id=task.id,
         status=task.status,
