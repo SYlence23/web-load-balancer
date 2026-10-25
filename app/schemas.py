@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
@@ -18,3 +20,16 @@ class RenderRequest(ApiModel):
 class RenderCreated(ApiModel):
     id: str
     renderer: str
+
+
+class RenderStatus(ApiModel):
+    id: str
+    status: str
+    progress: float
+    error: str | None
+    renderer: str
+    scene: str
+    width: int
+    height: int
+    spp: int
+    created_at: datetime
