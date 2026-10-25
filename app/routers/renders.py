@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import get_current_user
 from app.balancer import NoRendererAvailable, RendererRejected, registry
 from app.db import get_session
+from app.limits import check_active_tasks, check_render_size, trim_history, user_locks
 from app.models import FINAL_STATUSES, Task, User
 from app.schemas import RenderCreated, RenderRequest, RenderStatus
 
@@ -28,6 +29,19 @@ async def create_render(
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> RenderCreated:
+    check_render_size(body)
+
+    async with user_locks[user.id]:
+        await check_active_tasks(session, user.id)
+        task = await _dispatch(body, http, user)
+        session.add(task)
+        await trim_history(session, user.id)
+        await session.commit()
+
+    return RenderCreated(id=task.id, renderer=task.renderer)
+
+
+async def _dispatch(body: RenderRequest, http: httpx.AsyncClient, user: User) -> Task:
     payload = {
         "scene": body.scene,
         "width": body.width,
@@ -45,7 +59,7 @@ async def create_render(
     except RendererRejected as error:
         raise HTTPException(error.status_code, error.detail)
 
-    task = Task(
+    return Task(
         user_id=user.id,
         scene=body.scene,
         width=body.width,
@@ -57,9 +71,6 @@ async def create_render(
         renderer_url=renderer.url,
         renderer_task_id=renderer_task_id,
     )
-    session.add(task)
-    await session.commit()
-    return RenderCreated(id=task.id, renderer=renderer.name)
 
 
 @router.get("", response_model=list[RenderStatus])
