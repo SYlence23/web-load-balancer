@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager, suppress
 import httpx
 from fastapi import FastAPI
 
+from app.autoscaler import autoscaler
 from app.balancer import registry
 from app.config import settings
 from app.db import engine, init_db
@@ -24,6 +25,8 @@ async def lifespan(app: FastAPI):
             asyncio.create_task(registry.run(http)),
             asyncio.create_task(tracker.run(http)),
         ]
+        if settings.autoscale:
+            background.append(asyncio.create_task(autoscaler.run()))
         yield
         for task in background:
             task.cancel()
@@ -43,4 +46,4 @@ app.include_router(admin.router)
 
 @app.get("/health")
 async def health() -> dict:
-    return {"status": "ok", "renderers": settings.renderer_urls}
+    return {"status": "ok", "renderers": [r.url for r in registry.renderers]}

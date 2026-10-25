@@ -75,6 +75,16 @@ estimated_wait ≈ (position_in_queue / total_capacity) × avg_render_time
 
 Here `avg_render_time` is a moving average of recently finished tasks, ideally normalised by complexity (pixels × samples). Whenever a renderer frees a slot, the head of the queue is dispatched.
 
+### Autoscaling
+
+When `AUTOSCALE=true`, a background loop in `app/autoscaler.py` checks the queue and the load every `AUTOSCALE_INTERVAL` seconds and starts or stops renderer containers through the Docker API (the gateway container needs `/var/run/docker.sock` mounted):
+
+- **Scale up** when tasks are queued or the load of the up renderers is at least `AUTOSCALE_UP_LOAD`, one container at a time, waiting until the new one answers `/health`.
+- **Scale down** when the queue is empty and an autoscaled renderer has been idle for `AUTOSCALE_IDLE_SECONDS`, but only if the remaining renderers stay below `AUTOSCALE_UP_LOAD` without it.
+- The renderer count always stays within `AUTOSCALE_MIN` / `AUTOSCALE_MAX`. Static renderers from `RENDERERS` count toward it but are never stopped.
+- New containers use the `AUTOSCALE_IMAGE` image, join the gateway's own Docker network and are named `ray-worker-3`, `ray-worker-4`, and so on.
+- A container that doesn't answer for `AUTOSCALE_START_TIMEOUT` seconds is removed. On shutdown the gateway removes the containers it started, and after a crash it adopts the ones still running.
+
 ---
 
 ## Limits
@@ -142,7 +152,11 @@ Keep this table in sync with the web-ray-worker README.
 | `HEALTH_INTERVAL` | `2` | Seconds between health checks |
 | `HEALTH_FAILS` | `3` | Failed checks before a renderer is marked down |
 | `JWT_SECRET` | *(set in .env)* | Token signing key |
+| `AUTOSCALE` | `true` | Turn the autoscaler on (off by default for local development) |
 | `AUTOSCALE_MIN` / `AUTOSCALE_MAX` | `2` / `5` | Renderer count bounds |
+| `AUTOSCALE_UP_LOAD` | `0.8` | Load at which a renderer is added |
+| `AUTOSCALE_IDLE_SECONDS` | `60` | Idle time before an autoscaled renderer is stopped |
+| `AUTOSCALE_IMAGE` | `web-ray-worker` | Image for new renderer containers |
 
 ## Tech stack
 

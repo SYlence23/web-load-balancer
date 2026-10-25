@@ -20,6 +20,19 @@ class Settings(BaseSettings):
     max_active_per_user: int = 3
     max_history_per_user: int = 50
 
+    autoscale: bool = False
+    autoscale_min: int = 2
+    autoscale_max: int = 5
+    autoscale_interval: float = 5.0
+    autoscale_up_load: float = 0.8
+    autoscale_idle_seconds: float = 60.0
+    autoscale_start_timeout: float = 90.0
+    autoscale_image: str = "web-ray-worker"
+    autoscale_network: str = ""
+    autoscale_name_prefix: str = "ray-worker"
+    autoscale_worker_port: int = 8080
+    autoscale_worker_capacity: int = 2
+
     @property
     def renderer_urls(self) -> list[str]:
         return [url.strip().rstrip("/") for url in self.renderers.split(",") if url.strip()]

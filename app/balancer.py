@@ -47,6 +47,19 @@ class RendererRegistry:
             await asyncio.gather(*(self._check(client, r) for r in self.renderers))
             await asyncio.sleep(self.interval)
 
+    def get(self, url: str) -> Renderer | None:
+        return next((r for r in self.renderers if r.url == url), None)
+
+    def add(self, url: str) -> Renderer:
+        renderer = self.get(url)
+        if renderer is None:
+            renderer = Renderer(url=url, name=url)
+            self.renderers.append(renderer)
+        return renderer
+
+    def remove(self, url: str) -> None:
+        self.renderers = [r for r in self.renderers if r.url != url]
+
     def pick(self, exclude: set[str]) -> Renderer | None:
         candidates = [
             r for r in self.renderers
