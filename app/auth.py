@@ -50,5 +50,11 @@ async def get_current_user(
     return user
 
 
+async def require_admin(user: User = Depends(get_current_user)) -> User:
+    if not user.is_admin:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Admins only.")
+    return user
+
+
 def _unauthorized(detail: str) -> HTTPException:
     return HTTPException(status.HTTP_401_UNAUTHORIZED, detail, headers={"WWW-Authenticate": "Bearer"})

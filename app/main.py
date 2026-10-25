@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from app.balancer import registry
 from app.config import settings
 from app.db import engine, init_db
-from app.routers import auth, progress, renders
+from app.routers import admin, auth, progress, renders
 from app.tracker import tracker
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:     %(name)s - %(message)s")
@@ -38,24 +38,9 @@ app = FastAPI(title="web-load-balancer", lifespan=lifespan)
 app.include_router(auth.router)
 app.include_router(renders.router)
 app.include_router(progress.router)
+app.include_router(admin.router)
 
 
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok", "renderers": settings.renderer_urls}
-
-
-@app.get("/admin/renderers")
-async def list_renderers() -> list[dict]:
-    return [
-        {
-            "name": r.name,
-            "url": r.url,
-            "up": r.up,
-            "running": r.running,
-            "capacity": r.capacity,
-            "load": round(r.load, 2),
-            "lastSeen": r.last_seen,
-        }
-        for r in registry.renderers
-    ]

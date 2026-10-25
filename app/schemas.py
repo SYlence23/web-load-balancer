@@ -34,6 +34,32 @@ class RenderRequest(ApiModel):
     seed: int | None = None
 
 
+class AdminRenderer(ApiModel):
+    name: str
+    url: str
+    up: bool
+    running: int
+    capacity: int
+    load: float
+    last_seen: datetime | None
+
+
+class AdminTask(ApiModel):
+    id: uuid.UUID
+    username: str | None
+    status: str
+    progress: float
+    renderer: str | None
+    scene: str
+    width: int
+    height: int
+    spp: int
+    created_at: datetime
+    started_at: datetime | None
+    queue_position: int | None
+    eta_seconds: float | None
+
+
 class RenderCreated(ApiModel):
     id: uuid.UUID
     status: str
