@@ -125,7 +125,11 @@ class Autoscaler:
             name=name,
             detach=True,
             network=self.network,
-            environment={"Worker__Name": name, "Worker__Capacity": str(settings.autoscale_worker_capacity)},
+            environment={
+                "Worker__Name": name,
+                "Worker__Capacity": str(settings.autoscale_worker_capacity),
+                "Worker__Token": settings.worker_token,
+            },
             labels={LABEL: self.network},
             restart_policy={"Name": "unless-stopped"},
         )

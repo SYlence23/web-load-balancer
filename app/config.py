@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     renderers: str = "http://localhost:5001,http://localhost:5002"
     health_interval: float = 2.0
     health_fails: int = 3
+    worker_token: str = ""
     database_url: str = "postgresql+asyncpg://postgres@localhost:5432/WEBdb"
     tracker_interval: float = 1.0
     images_dir: str = "data/images"
@@ -32,6 +33,10 @@ class Settings(BaseSettings):
     autoscale_name_prefix: str = "ray-worker"
     autoscale_worker_port: int = 8080
     autoscale_worker_capacity: int = 2
+
+    @property
+    def worker_headers(self) -> dict[str, str]:
+        return {"X-Worker-Token": self.worker_token} if self.worker_token else {}
 
     @property
     def renderer_urls(self) -> list[str]:

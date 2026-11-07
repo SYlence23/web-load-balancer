@@ -151,6 +151,7 @@ Keep this table in sync with the web-ray-worker README.
 | `RENDERERS` | `http://renderer-1:8080,http://renderer-2:8080` | Static renderer list |
 | `HEALTH_INTERVAL` | `2` | Seconds between health checks |
 | `HEALTH_FAILS` | `3` | Failed checks before a renderer is marked down |
+| `WORKER_TOKEN` | *(set in .env)* | Shared secret sent to renderers in the `X-Worker-Token` header and passed to autoscaled containers. Empty means no header |
 | `JWT_SECRET` | *(set in .env)* | Token signing key |
 | `AUTOSCALE` | `true` | Turn the autoscaler on (off by default for local development) |
 | `AUTOSCALE_MIN` / `AUTOSCALE_MAX` | `2` / `5` | Renderer count bounds |

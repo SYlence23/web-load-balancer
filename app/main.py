@@ -19,7 +19,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s:     %(name)s - %(
 async def lifespan(app: FastAPI):
     await init_db()
 
-    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as http:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0), headers=settings.worker_headers) as http:
         app.state.http = http
         background = [
             asyncio.create_task(registry.run(http)),
